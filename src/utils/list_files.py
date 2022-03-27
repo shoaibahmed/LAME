@@ -10,8 +10,10 @@ def menu_selection(paths: Union[Path, List[Path]]) -> List[Path]:
     """
     if not isinstance(paths, list):
         paths = list(paths.iterdir())
+    assert len(paths) > 0, "Empty list of paths encountered!"
     paths.sort()
     print()
+
     for i, dir_ in enumerate(paths):
         printable = join(*dir_.parts[-2:])
         print(f"{i} - {printable} \n")

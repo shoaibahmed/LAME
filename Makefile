@@ -1,7 +1,9 @@
+SHELL=/bin/bash
+
 # ------ GPU option ---------
 
-GPUS=all# use e.g. GPUS=0,1,2 if you only want to use a certain set of GPUs on the cluster
-GPU_FREE_UNDER=20# Usgae of memory (in MB) under which a GPU is considered free for simulation.
+GPUS=all # use e.g. GPUS=0,1,2 if you only want to use a certain set of GPUs on the cluster
+GPU_FREE_UNDER=10000 # Usgae of memory (in MB) under which a GPU is considered free for simulation.
 
 
 # ------ SERVER options --------- (only useful if you want to deploy/import results from remote server)
@@ -88,7 +90,7 @@ nam_failure: checkpoints/msra/R-50.pkl
 	make MODE=test DATASET=imagenet_val method=tent data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01 0.1" run
 
 plot_nam:
-	make LABELS=ADAPTATION.LR DATASET=imagenet_val plot_metrics
+	make MODE=test LABELS=ADAPTATION.LR DATASET=imagenet_val plot_metrics
 
 # --------------------------- Validation ---------------------------
 # ------------------------------------------------------------------
