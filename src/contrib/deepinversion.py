@@ -76,6 +76,7 @@ def denormalize(image_tensor, use_fp16=False):
     '''
     convert floats back to input
     '''
+    assert (0. <= image_tensor <= 1.).all(), f"{image_tensor.min()} / {image_tensor.max()}"
     return image_tensor
 
     if use_fp16:
@@ -430,31 +431,36 @@ class DeepInversionClass(object):
                                                                                            local_rank),
                                           normalize=True, scale_each=True, nrow=int(10))
 
-        if self.store_best_images:
-            best_inputs = denormalize(best_inputs)
-            self.save_images(best_inputs, targets)
+        best_inputs = denormalize(best_inputs)
+        image_list = self.save_images(best_inputs, targets, self.store_best_images)
 
         # to reduce memory consumption by states of the optimizer we deallocate memory
         optimizer.state = collections.defaultdict(dict)
 
-    def save_images(self, images, targets):
+        return image_list
+
+    def save_images(self, images, targets, store_best_images):
         # method to store generated images locally
         local_rank = torch.cuda.current_device()
+        image_list = []
         for id in range(images.shape[0]):
             class_id = targets[id].item()
-            if 0:
-                #save into separate folders
-                place_to_store = '{}/s{:03d}/img_{:05d}_id{:03d}_gpu_{}_2.jpg'.format(self.final_data_path, class_id,
-                                                                                          self.num_generations, id,
-                                                                                          local_rank)
-            else:
-                place_to_store = '{}/img_s{:03d}_{:05d}_id{:03d}_gpu_{}_2.jpg'.format(self.final_data_path, class_id,
-                                                                                          self.num_generations, id,
-                                                                                          local_rank)
+            if store_best_images:
+                if 0:
+                    #save into separate folders
+                    place_to_store = '{}/s{:03d}/img_{:05d}_id{:03d}_gpu_{}_2.jpg'.format(self.final_data_path, class_id,
+                                                                                            self.num_generations, id,
+                                                                                            local_rank)
+                else:
+                    place_to_store = '{}/img_s{:03d}_{:05d}_id{:03d}_gpu_{}_2.jpg'.format(self.final_data_path, class_id,
+                                                                                            self.num_generations, id,
+                                                                                            local_rank)
 
             image_np = images[id].data.cpu().numpy().transpose((1, 2, 0))
             pil_image = Image.fromarray((image_np * 255).astype(np.uint8))
             pil_image.save(place_to_store)
+            image_list.append(pil_image)
+        return image_list
 
     def generate_batch(self, net_student=None, targets=None):
         # for ADI detach student and add put to eval mode
@@ -471,8 +477,10 @@ class DeepInversionClass(object):
             if use_fp16:
                 targets = targets.half()
 
-        self.get_images(net_student=net_student, targets=targets)
+        image_list = self.get_images(net_student=net_student, targets=targets)
 
         net_teacher.eval()
 
         self.num_generations += 1
+
+        return image_list

@@ -24,13 +24,13 @@ def validate_one(input, target, model):
         return res
 
     with torch.no_grad():
-        output = model(input)
+        output = model(input)['probas']
         prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
 
     print("Verifier accuracy: ", prec1.item())
 
 
-def get_imagenet_examples(net):
+def get_imagenet_examples(net, bs=256):
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
 
@@ -46,7 +46,7 @@ def get_imagenet_examples(net):
     args.fp16 = False
 
     args.resolution = 224
-    bs = args.bs
+    # bs = 256
     jitter = 30
 
     parameters = dict()
@@ -69,7 +69,7 @@ def get_imagenet_examples(net):
     coefficients["main_loss_multiplier"] = 1.0
     coefficients["adi_scale"] = 0.0
 
-    network_output_function = lambda x: x
+    network_output_function = lambda x: x['probas']
 
     # check accuracy of verifier
     net.eval()
@@ -90,4 +90,5 @@ def get_imagenet_examples(net):
                                              coefficients = coefficients,
                                              network_output_function = network_output_function,
                                              hook_for_display = hook_for_display)
-    DeepInversionEngine.generate_batch()
+    image_list = DeepInversionEngine.generate_batch()
+    return image_list

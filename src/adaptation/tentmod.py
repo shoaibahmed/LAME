@@ -7,6 +7,8 @@ import time
 from .adaptive import AdaptiveMethod
 from .build import ADAPTER_REGISTRY
 
+from ..contrib import get_imagenet_examples
+
 __all__ = ["TentMod"]
 
 logger = logging.getLogger(__name__)
@@ -83,7 +85,8 @@ class TentMod(AdaptiveMethod):
 
         # Compute the extra examples here
         # TODO: Add a way to infer these examples
-        self.extra_examples = None
+        num_examples = 256
+        self.extra_examples = get_imagenet_examples(self.model, bs=num_examples)
 
         # Compute the feature so as to compute the alignment loss
         with torch.no_grad():
