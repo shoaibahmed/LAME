@@ -108,8 +108,8 @@ class Classifier(nn.Module):
         return self.pixel_mean.device
 
     def forward(self, batched_inputs: List[Dict[str, Any]]):
-        probas = self.get_probas(batched_inputs)
-        results = self.format_result(batched_inputs, probas)
+        probas, cat_features = self.get_probas(batched_inputs)
+        results = self.format_result(batched_inputs, probas, cat_features)
         return results
 
     def normalize(self, batched_inputs: List[Dict[str, Any]], key: str):
@@ -182,7 +182,7 @@ class Classifier(nn.Module):
         probas = logits.softmax(-1)
         if remap:
             probas = self.remap_probas(probas)
-        return probas
+        return probas, cat_features
 
     def avgpool(self, x: torch.Tensor, valid_pixels: torch.Tensor) -> torch.Tensor:
         """
@@ -196,10 +196,10 @@ class Classifier(nn.Module):
         return pooled_map
 
     def format_result(self, batched_inputs: List[Dict[str, Any]],
-                      probas: torch.tensor) -> Dict[str, Any]:
+                      probas: torch.tensor, features: torch.tensor) -> Dict[str, Any]:
 
         image_sizes = [x["image"].shape for x in batched_inputs]
-        results = {'probas': probas}
+        results = {'probas': probas, 'features': features}
         gt = torch.tensor([obj["instances"].gt_classes[0] for obj in batched_inputs]).to(self.device)
         results['gts'] = gt
         results['one_hot_gts'] = F.one_hot(gt, self.num_classes)

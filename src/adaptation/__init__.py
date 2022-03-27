@@ -1,5 +1,6 @@
 from .build import build_adapter
 from .tent import *
+from .tentmod import *
 from .shot import *
 from .non_adaptive import *
 from .adaptive import *
