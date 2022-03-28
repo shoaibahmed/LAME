@@ -40,8 +40,9 @@ class NonAdaptiveMethod(DefaultAdapter):
     def run_step(self, batched_inputs: List[Dict[str, torch.Tensor]]):
 
         out = self.model(batched_inputs)
+        logits = out["logits"]
         probas = out["probas"]
         features = out["features"]
-        final_output = self.model.format_result(batched_inputs, probas, features)
+        final_output = self.model.format_result(batched_inputs, logits, probas, features)
 
         return final_output

@@ -56,7 +56,7 @@ def get_imagenet_examples(net, bs=256):
 
     coefficients = dict()
     coefficients["r_feature"] = 0.01
-    coefficients["first_bn_multiplier"] = 10.
+    coefficients["first_bn_multiplier"] = 10.0
     coefficients["tv_l1"] = 0.0
     coefficients["tv_l2"] = 0.0001
     coefficients["l2"] = 0.00001
@@ -64,7 +64,7 @@ def get_imagenet_examples(net, bs=256):
     coefficients["main_loss_multiplier"] = 1.0
     coefficients["adi_scale"] = 0.0
 
-    network_output_function = lambda x: x['probas']
+    network_output_function = lambda x: x['logits']
 
     # check accuracy of verifier
     verifier = False
