@@ -36,12 +36,8 @@ def get_imagenet_examples(net, bs=256):
     # temporal data and generations will be stored here
     exp_name = "generations/%s"%exp_name
 
-    iterations = 2000
-    start_noise = True
     setting_id = 0  # Multi-scale
     fp16 = False
-
-    resolution = 224
     jitter = 30
 
     parameters = dict()

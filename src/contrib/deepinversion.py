@@ -72,11 +72,22 @@ def clip(image_tensor, use_fp16=False):
     return image_tensor
 
 
+def forward_prop(net, image):
+    if not net.normalize_input:
+        image = torch.clamp(image * 255, 0, 255)
+    if net.standardize_input:
+        image = (image - net.pixel_mean) / net.pixel_std
+    return net(image)
+
+
 def denormalize(image_tensor, use_fp16=False):
     '''
     convert floats back to input
     '''
-    assert (0. <= image_tensor <= 1.).all(), f"{image_tensor.min()} / {image_tensor.max()}"
+    # assert (0. <= image_tensor <= 1.).all(), f"{image_tensor.min()} / {image_tensor.max()}"
+    min_val, max_val = 0.0, 1.0
+    assert torch.all(torch.ge(image_tensor, torch.tensor(min_val, device=image_tensor.device, dtype=image_tensor.dtype)))
+    assert torch.all(torch.le(image_tensor, torch.tensor(max_val, device=image_tensor.device, dtype=image_tensor.dtype)))
     return image_tensor
 
     if use_fp16:
@@ -272,7 +283,7 @@ class DeepInversionClass(object):
         img_original = self.image_resolution
 
         data_type = torch.half if use_fp16 else torch.float
-        inputs = torch.randn((self.bs, 3, img_original, img_original), requires_grad=True, device='cuda',
+        inputs = torch.rand((self.bs, 3, img_original, img_original), requires_grad=True, device='cuda',
                              dtype=data_type)
         pooling_function = nn.modules.pooling.AvgPool2d(kernel_size=2)
 
@@ -340,7 +351,8 @@ class DeepInversionClass(object):
                 optimizer.zero_grad()
                 net_teacher.zero_grad()
 
-                outputs = net_teacher(inputs_jit)
+                # outputs = net_teacher(inputs_jit)
+                outputs = forward_prop(net_teacher, inputs_jit)
                 outputs = self.network_output_function(outputs)
 
                 # R_cross classification loss
