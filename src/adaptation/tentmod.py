@@ -91,7 +91,7 @@ class TentMod(AdaptiveMethod):
 
         # Compute the extra examples here
         self.extra_examples = get_imagenet_examples(self.model, bs=self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES)
-        print("Number of examples generated:", self.extra_examples)
+        print("Generated examples shape:", self.extra_examples.shape)
 
         # Compute the feature so as to compute the alignment loss
         with torch.no_grad():

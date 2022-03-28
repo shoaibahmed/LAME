@@ -472,7 +472,7 @@ class DeepInversionClass(object):
             image_np = images[id].data.cpu().numpy().transpose((1, 2, 0))
             pil_image = Image.fromarray((image_np * 255).astype(np.uint8))
             pil_image.save(place_to_store)
-            image_list.append(pil_image)
+            image_list.append(np.array(pil_image))
         return image_list
 
     def generate_batch(self, net_student=None, targets=None):
