@@ -128,7 +128,7 @@ class Classifier(nn.Module):
         if isinstance(batched_inputs, list):
             tensor = self.normalize(batched_inputs, key)
         elif isinstance(batched_inputs, torch.Tensor):
-            images = batched_inputs
+            tensor = batched_inputs
         else:
             raise ValueError("Input format not recognized.")
 
@@ -198,20 +198,29 @@ class Classifier(nn.Module):
     def format_result(self, batched_inputs: List[Dict[str, Any]],
                       probas: torch.tensor, features: torch.tensor) -> Dict[str, Any]:
 
-        image_sizes = [x["image"].shape for x in batched_inputs]
+        # image_sizes = [x["image"].shape for x in batched_inputs]
+        is_tensor = False
+        if isinstance(batched_inputs, list):
+            image_sizes = [x["image"].shape for x in batched_inputs]
+        elif isinstance(batched_inputs, torch.Tensor):
+            image_sizes = [x.shape for x in batched_inputs]
+            is_tensor = True
+        else:
+            raise ValueError("Input format not recognized.")
         results = {'probas': probas, 'features': features}
-        gt = torch.tensor([obj["instances"].gt_classes[0] for obj in batched_inputs]).to(self.device)
-        results['gts'] = gt
-        results['one_hot_gts'] = F.one_hot(gt, self.num_classes)
-        results["instances"] = []
-        with torch.no_grad():
-            for i, image_size in enumerate(image_sizes):
-                res = Instances(image_size)
-                # print(list(batched_inputs[i].keys()))
-                gt_instances = batched_inputs[i]["instances"]
-                res.gt_classes = gt_instances.gt_classes
-                n_instances = len(gt_instances.gt_classes)
-                res.pred_classes = probas[i].argmax(-1, keepdim=True).repeat(n_instances)
-                res.scores = probas[i].max(-1, keepdim=True).values.repeat(n_instances)
-                results["instances"].append(res)
+        if not is_tensor:
+            gt = torch.tensor([obj["instances"].gt_classes[0] for obj in batched_inputs]).to(self.device)
+            results['gts'] = gt
+            results['one_hot_gts'] = F.one_hot(gt, self.num_classes)
+            results["instances"] = []
+            with torch.no_grad():
+                for i, image_size in enumerate(image_sizes):
+                    res = Instances(image_size)
+                    # print(list(batched_inputs[i].keys()))
+                    gt_instances = batched_inputs[i]["instances"]
+                    res.gt_classes = gt_instances.gt_classes
+                    n_instances = len(gt_instances.gt_classes)
+                    res.pred_classes = probas[i].argmax(-1, keepdim=True).repeat(n_instances)
+                    res.scores = probas[i].max(-1, keepdim=True).values.repeat(n_instances)
+                    results["instances"].append(res)
         return results

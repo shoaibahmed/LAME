@@ -1,5 +1,3 @@
-import argparse
-
 import torch
 from torch import nn
 from .deepinversion import DeepInversionClass
@@ -31,27 +29,24 @@ def validate_one(input, target, model):
 
 
 def get_imagenet_examples(net, bs=256):
-    parser = argparse.ArgumentParser()
-    args = parser.parse_args()
 
-    exp_name = args.exp_name
+    exp_name = "tentmod_test"
     # final images will be stored here:
     adi_data_path = "./final_images/%s"%exp_name
     # temporal data and generations will be stored here
     exp_name = "generations/%s"%exp_name
 
-    args.iterations = 2000
-    args.start_noise = True
-    args.setting_id = 0  # Multi-scale
-    args.fp16 = False
+    iterations = 2000
+    start_noise = True
+    setting_id = 0  # Multi-scale
+    fp16 = False
 
-    args.resolution = 224
-    # bs = 256
+    resolution = 224
     jitter = 30
 
     parameters = dict()
     parameters["resolution"] = 224
-    parameters["random_label"] = False
+    parameters["random_label"] = True
     parameters["start_noise"] = True
     parameters["detach_student"] = False
     parameters["do_flip"] = True
@@ -72,8 +67,9 @@ def get_imagenet_examples(net, bs=256):
     network_output_function = lambda x: x['probas']
 
     # check accuracy of verifier
+    verifier = False
     net.eval()
-    if args.verifier:
+    if verifier:
         hook_for_display = lambda x,y: validate_one(x, y, net)
     else:
         hook_for_display = None
@@ -82,9 +78,9 @@ def get_imagenet_examples(net, bs=256):
                                              final_data_path=adi_data_path,
                                              path=exp_name,
                                              parameters=parameters,
-                                             setting_id=args.setting_id,
+                                             setting_id=setting_id,
                                              bs = bs,
-                                             use_fp16 = args.fp16,
+                                             use_fp16 = fp16,
                                              jitter = jitter,
                                              criterion=criterion,
                                              coefficients = coefficients,

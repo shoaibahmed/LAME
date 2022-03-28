@@ -74,12 +74,14 @@ class TentMod(AdaptiveMethod):
 
     """
 
-    # def __init__(self, cfg, args, **kwargs):
-    #     """
-    #     Args:
-    #         cfg (CfgNode):
-    #     """
-    #     super().__init__(cfg, args, **kwargs)
+    def __init__(self, cfg, args, **kwargs):
+        """
+        Args:
+            cfg (CfgNode):
+        """
+        super().__init__(cfg, args, **kwargs)
+
+        self.initialize_examples()
 
     def initialize_examples(self):
         if hasattr(self, 'extra_examples'):
@@ -99,8 +101,6 @@ class TentMod(AdaptiveMethod):
         self.feature_criterion = torch.nn.MSELoss()
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
-        self.initialize_examples()
-
         t0 = time.time()
         # Compute the probs on the given set of examples
         probas = self.model(batched_inputs)['probas']

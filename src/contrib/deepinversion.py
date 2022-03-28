@@ -260,6 +260,7 @@ class DeepInversionClass(object):
             #only works for classification now, for other tasks need to provide target vector
             targets = torch.LongTensor([random.randint(0, 999) for _ in range(self.bs)]).to('cuda')
             if not self.random_label:
+                raise NotImplementedError
                 # preselected classes, good for ResNet50v1.5
                 targets = [1, 933, 946, 980, 25, 63, 92, 94, 107, 985, 151, 154, 207, 250, 270, 277, 283, 292, 294, 309,
                            311,
@@ -267,7 +268,7 @@ class DeepInversionClass(object):
                            967, 574, 487]
 
                 targets = torch.LongTensor(targets * (int(self.bs / len(targets)))).to('cuda')
-
+            print("Targets created:", targets.shape)
         img_original = self.image_resolution
 
         data_type = torch.half if use_fp16 else torch.float

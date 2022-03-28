@@ -41,6 +41,7 @@ class NonAdaptiveMethod(DefaultAdapter):
 
         out = self.model(batched_inputs)
         probas = out["probas"]
-        final_output = self.model.format_result(batched_inputs, probas)
+        features = out["features"]
+        final_output = self.model.format_result(batched_inputs, probas, features)
 
         return final_output
