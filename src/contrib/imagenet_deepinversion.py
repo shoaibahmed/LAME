@@ -2,7 +2,7 @@ import argparse
 
 import torch
 from torch import nn
-from deepinversion import DeepInversionClass
+from .deepinversion import DeepInversionClass
 
 
 def validate_one(input, target, model):

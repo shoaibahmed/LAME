@@ -85,6 +85,9 @@ store: # Archive experiments from output/ to archive/
 # --------------- Fig 1 in paper ---------------
 # ----------------------------------------------
 
+nam_failure_tentmod: checkpoints/msra/R-50.pkl
+	make MODE=test DATASET=imagenet_val method=tentmod data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.1" run
+
 nam_failure: checkpoints/msra/R-50.pkl
 	make MODE=test DATASET=imagenet_val method=non_adaptive data=niid_balanced run
 	make MODE=test DATASET=imagenet_val method=tent data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01 0.1" run
@@ -427,6 +430,7 @@ run:
             mkdir -p $${OUTPUT} ;\
             python -m src.main \
                 --allowed_gpus $(GPUS) \
+                --gpu_free_under ${GPU_FREE_UNDER} \
                 --data-config $(data_cfg) \
                 --method-config $(method_cfg) \
                 --model-config $(model_cfg) \

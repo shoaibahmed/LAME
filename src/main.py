@@ -182,9 +182,9 @@ def argument_parser(epilog=None):
     parser.add_argument("--mode", required=True, help="benchmark or validation")
     parser.add_argument("--allowed_gpus", type=str, required=True,
                         help="Which GPUs to use on the cluster. Either set to 'all' or e.g. 0,1,2")
-    parser.add_argument("--gpu_per_exp", type=str, default=1,
+    parser.add_argument("--gpu_per_exp", type=int, default=1,
                         help="How many GPUs are  required for each exp.")
-    parser.add_argument("--gpu_free_under", type=str, default=20,
+    parser.add_argument("--gpu_free_under", type=int, default=20,
                         help="When a GPU is using less gpu_free_under memory, it is considered free.")
     parser.add_argument(
         "opts",

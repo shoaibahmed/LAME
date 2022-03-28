@@ -74,28 +74,32 @@ class TentMod(AdaptiveMethod):
 
     """
 
-    def __init__(self, cfg, args, **kwargs):
-        """
-        Args:
-            cfg (CfgNode):
-        """
-        super().__init__(cfg, args, **kwargs)
+    # def __init__(self, cfg, args, **kwargs):
+    #     """
+    #     Args:
+    #         cfg (CfgNode):
+    #     """
+    #     super().__init__(cfg, args, **kwargs)
 
-        self.lambda_alignment = 0.1
+    def initialize_examples(self):
+        if hasattr(self, 'extra_examples'):
+            return
+        print("Initializing model examples...")
+        self.lambda_alignment = self.cfg.ADAPTATION.LAMBDA_ALIGNMENT
 
         # Compute the extra examples here
-        # TODO: Add a way to infer these examples
-        num_examples = 256
-        self.extra_examples = get_imagenet_examples(self.model, bs=num_examples)
+        self.extra_examples = get_imagenet_examples(self.model, bs=self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES)
+        print("Number of examples generated:", self.extra_examples)
 
         # Compute the feature so as to compute the alignment loss
         with torch.no_grad():
             self.model.eval()
-            self.precomputed_features_ex = self.model(self.extra_examples)['features']
+            self.precomputed_features_ex = self.model(self.extra_examples)['features'].detach()
             self.model.train()
         self.feature_criterion = torch.nn.MSELoss()
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
+        self.initialize_examples()
 
         t0 = time.time()
         # Compute the probs on the given set of examples
@@ -113,7 +117,7 @@ class TentMod(AdaptiveMethod):
 
         # Include the second loss term
         alignment_loss = self.feature_criterion(self.precomputed_features_ex, features_ex)
-        loss = loss + self.lambda_alignment * alignment_loss
+        loss = loss + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
 
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore[union-attr]

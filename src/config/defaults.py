@@ -79,6 +79,10 @@ _C.ADAPTATION.HPARAMS_VALUES = [
 							    ]  # noqa: E126
 
 
+# SAS New configs
+_C.ADAPTATION.LAMBDA_ALIGNMENT = 1.0
+_C.ADAPTATION.NUM_GENERATED_EXAMPLES = 256
+
 # -----------------------------------------------------------------------------
 # INPUT
 # -----------------------------------------------------------------------------
