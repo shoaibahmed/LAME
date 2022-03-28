@@ -25,6 +25,9 @@ import torchvision.utils as vutils
 from PIL import Image
 import numpy as np
 
+import src.data.utils
+from src.data.datasets.classes.imagenet import INDEX2IDNAME
+
 
 def create_folder(directory):
     # from https://stackoverflow.com/a/273227
@@ -472,7 +475,18 @@ class DeepInversionClass(object):
             image_np = images[id].data.cpu().numpy().transpose((1, 2, 0))
             pil_image = Image.fromarray((image_np * 255).astype(np.uint8))
             pil_image.save(place_to_store)
-            image_list.append(np.array(pil_image))
+
+            instances = []
+            cat_index = class_id
+            cat_id, cat_name = INDEX2IDNAME[cat_index]
+            instances.append({"category_id": cat_id, "supercategory_id": cat_id, 
+                          "supercategory_index": cat_index, "category_index": cat_index,
+                          "category_name": cat_name, "supercategory_name": cat_name})
+            # r["annotations"] = instances
+            image_shape = pil_image.size
+            instances = src.data.utils.annotations_to_instances(instances, image_shape)
+
+            image_list.append({'image': np.array(pil_image), 'instances': instances})
         return image_list
 
     def generate_batch(self, net_student=None, targets=None):

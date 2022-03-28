@@ -5,3 +5,4 @@ ID2NAME = {v[0]: v[1] for v in MAIN_DIC.values()}
 NAME2ID = {v[1]: v[0] for v in MAIN_DIC.values()}
 NAME2INDEX = {v[1]: int(k) for k, v in MAIN_DIC.items()}
 INDEX2ID = {v[1]: v[0] for v in ID2INDEX.items()}
+INDEX2IDNAME = {int(k): v for k, v in MAIN_DIC.items()}
