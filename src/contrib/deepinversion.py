@@ -133,12 +133,18 @@ class DeepInversionFeatureHook():
         self.hook.remove()
 
 
-def get_image_prior_losses(inputs_jit):
+def get_image_prior_losses(inputs_jit, net):
     # COMPUTE total variation regularization loss
     diff1 = inputs_jit[:, :, :, :-1] - inputs_jit[:, :, :, 1:]
     diff2 = inputs_jit[:, :, :-1, :] - inputs_jit[:, :, 1:, :]
     diff3 = inputs_jit[:, :, 1:, :-1] - inputs_jit[:, :, :-1, 1:]
     diff4 = inputs_jit[:, :, :-1, :-1] - inputs_jit[:, :, 1:, 1:]
+
+    # if not net.normalize_input:  # Ensure that the TV norm doesn't explode when images are unnormalized i.e. in range [0, 255]
+    #     diff1 = diff1 / 255.
+    #     diff2 = diff2 / 255.
+    #     diff3 = diff3 / 255.
+    #     diff4 = diff4 / 255.
 
     loss_var_l2 = torch.norm(diff1) + torch.norm(diff2) + torch.norm(diff3) + torch.norm(diff4)
     loss_var_l1 = (diff1.abs() / 255.0).mean() + (diff2.abs() / 255.0).mean() + (
@@ -287,7 +293,7 @@ class DeepInversionClass(object):
 
         data_type = torch.half if use_fp16 else torch.float
         inputs = torch.rand((self.bs, 3, img_original, img_original), requires_grad=True, device='cuda',
-                             dtype=data_type)
+                             dtype=data_type)  # Image in range [0, 1]
         pooling_function = nn.modules.pooling.AvgPool2d(kernel_size=2)
 
         if self.setting_id==0:
@@ -362,7 +368,7 @@ class DeepInversionClass(object):
                 loss = criterion(outputs, targets)
 
                 # R_prior losses
-                loss_var_l1, loss_var_l2 = get_image_prior_losses(inputs_jit)
+                loss_var_l1, loss_var_l2 = get_image_prior_losses(inputs_jit, net_teacher)
 
                 # R_feature loss
                 rescale = [self.first_bn_multiplier] + [1. for _ in range(len(self.loss_r_feature_layers)-1)]
@@ -473,8 +479,16 @@ class DeepInversionClass(object):
                                                                                             local_rank)
 
             image_np = images[id].data.cpu().numpy().transpose((1, 2, 0))
-            pil_image = Image.fromarray((image_np * 255).astype(np.uint8))
-            pil_image.save(place_to_store)
+
+            # Convert BGR to RGB if required for saving the images
+            if not self.net_teacher.normalize_input:
+                # MSRA checkpoint -- uses BGR input
+                pil_image = Image.fromarray((image_np[:, :, ::-1] * 255).astype(np.uint8))  # BGR to RGB for saving
+                pil_image.save(place_to_store)
+                pil_image = Image.fromarray((image_np * 255).astype(np.uint8))  # Recreate image with original BGR format
+            else:
+                pil_image = Image.fromarray((image_np * 255).astype(np.uint8))
+                pil_image.save(place_to_store)
 
             instances = []
             cat_index = class_id

@@ -36,7 +36,7 @@ def get_imagenet_examples(net, bs=256):
     # temporal data and generations will be stored here
     exp_name = "generations/%s"%exp_name
 
-    setting_id = 0  # Multi-scale
+    setting_id = 0  # settings for optimization: 0 - multi resolution, 1 - 2k iterations, 2 - 20k iterations
     fp16 = False
     jitter = 30
 
@@ -51,14 +51,26 @@ def get_imagenet_examples(net, bs=256):
     criterion = nn.CrossEntropyLoss()
 
     coefficients = dict()
-    coefficients["r_feature"] = 0.01
-    coefficients["first_bn_multiplier"] = 10.0
-    coefficients["tv_l1"] = 0.0
-    coefficients["tv_l2"] = 0.0001
-    coefficients["l2"] = 0.00001
-    coefficients["lr"] = 0.25
-    coefficients["main_loss_multiplier"] = 1.0
     coefficients["adi_scale"] = 0.0
+
+    if net.normalize_input:
+        # Input range between [0, 1]
+        coefficients["r_feature"] = 0.01
+        coefficients["first_bn_multiplier"] = 10.0
+        coefficients["tv_l1"] = 0.0
+        coefficients["tv_l2"] = 0.0001
+        coefficients["l2"] = 0.00001
+        coefficients["lr"] = 0.25
+        coefficients["main_loss_multiplier"] = 1.0
+    else:
+        # Input range between [0, 255]
+        coefficients["r_feature"] = 0.001  # Factor of 10 change
+        coefficients["first_bn_multiplier"] = 10 / 255.  # 10 / 255. -- the scale of inputs has changed
+        coefficients["tv_l1"] = 0.0
+        coefficients["tv_l2"] = 0.0001
+        coefficients["l2"] = 0.00001
+        coefficients["lr"] = 0.25 / 255.  # Reduced by a factor of 255.
+        coefficients["main_loss_multiplier"] = 10.0
 
     network_output_function = lambda x: x['logits']
 
