@@ -69,7 +69,7 @@ def get_imagenet_examples(net, bs=256):
         coefficients["tv_l1"] = 0.0
         coefficients["tv_l2"] = 0.0001
         coefficients["l2"] = 0.00001
-        coefficients["lr"] = 0.25 / 255.  # Reduced by a factor of 255.
+        coefficients["lr"] = 0.1  # Reduced by a small factor
         coefficients["main_loss_multiplier"] = 10.0
 
     network_output_function = lambda x: x['logits']
