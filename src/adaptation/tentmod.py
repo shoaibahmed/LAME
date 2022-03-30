@@ -97,7 +97,9 @@ class TentMod(AdaptiveMethod):
         with torch.no_grad():
             is_training = self.model.training  # Obtained from the module class
             self.model.eval()  # Put the model in eval mode
-            self.precomputed_features_ex = self.model(self.extra_examples)['features'].detach()
+            output_dict = self.model(self.extra_examples)
+            self.precomputed_features_ex = output_dict['features'].detach()
+            self.precomputed_logits_ex = output_dict['logits'].detach()
             self.model.train(mode=is_training)  # Set the model back into the same training mode
         self.feature_criterion = torch.nn.MSELoss()
 
@@ -107,19 +109,24 @@ class TentMod(AdaptiveMethod):
         probas = self.model(batched_inputs)['probas']
         
         # Compute the feature alignment loss on the given number of examples
-        features_ex = self.model(self.extra_examples)['features']
+        output_dict = self.model(self.extra_examples)
+        features_ex = output_dict['features']
+        logits_ex = output_dict['logits']
 
         self.metric_hook.scalar_dic["forward_time"].append(time.time() - t0)
         t1 = time.time()
 
         log_probas = torch.log(probas + 1e-10)
         entropy = -(probas * log_probas).sum(-1).mean(0)
-        loss = entropy
-
+        
         # Include the second loss term
-        alignment_loss = self.feature_criterion(self.precomputed_features_ex, features_ex)
-        loss = loss + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
-
+        feature_alignment_loss = self.feature_criterion(features_ex, self.precomputed_features_ex)
+        logit_alignment_loss = self.feature_criterion(logits_ex, self.precomputed_logits_ex)
+        alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
+        
+        loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
+        print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f}", flush=True)
+        
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore[union-attr]
         self.optimizer.step()

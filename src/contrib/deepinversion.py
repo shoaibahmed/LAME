@@ -447,7 +447,13 @@ class DeepInversionClass(object):
 
                 if iteration % save_every==0 and (save_every > 0):
                     if local_rank==0:
-                        vutils.save_image(inputs,
+                        # Convert BGR to RGB if required for saving the images
+                        if not self.net_teacher.normalize_input:
+                            # MSRA checkpoint -- uses BGR input
+                            inputs_rgb = inputs[:, :, ::-1]
+                        else:
+                            inputs_rgb = inputs
+                        vutils.save_image(inputs_rgb,
                                           '{}/best_images/output_{:05d}_gpu_{}.png'.format(self.prefix,
                                                                                            iteration // save_every,
                                                                                            local_rank),

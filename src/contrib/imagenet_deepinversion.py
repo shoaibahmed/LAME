@@ -42,7 +42,7 @@ def validate_one(input, target, model):
 
 def get_imagenet_examples(net, bs=256):
     exp_name = "tentmod_test"
-    
+
     # Check if the pickle file already contains the batch information
     cache_data_path = "./final_images/%s/cache.pkl"%exp_name
     if os.path.exists(cache_data_path):
@@ -54,10 +54,8 @@ def get_imagenet_examples(net, bs=256):
         else:
             print(f"Warning: the cache file contains a different number of examples ({len(image_list)} instead of {bs}). Regenerating images...")
 
-    # final images will be stored here:
-    adi_data_path = "./final_images/%s"%exp_name
-    # temporal data and generations will be stored here
-    exp_name = "generations/%s"%exp_name
+    adi_data_path = os.path.join("./", "final_images", exp_name)  # final images will be stored here
+    exp_name = os.path.join(adi_data_path, "generations")  # temporal data and generations will be stored here
 
     setting_id = 0  # settings for optimization: 0 - multi resolution, 1 - 2k iterations, 2 - 20k iterations
     fp16 = False
@@ -87,7 +85,7 @@ def get_imagenet_examples(net, bs=256):
         coefficients["main_loss_multiplier"] = 1.0
     else:
         # Input range between [0, 255]
-        coefficients["r_feature"] = 0.001  # Factor of 10 change
+        coefficients["r_feature"] = 0.003  # Factor of 3 reduction
         coefficients["first_bn_multiplier"] = 10 / 255.  # 10 / 255. -- the scale of inputs has changed
         coefficients["tv_l1"] = 0.0
         coefficients["tv_l2"] = 0.0001
