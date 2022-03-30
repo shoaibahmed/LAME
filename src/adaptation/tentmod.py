@@ -95,9 +95,10 @@ class TentMod(AdaptiveMethod):
 
         # Compute the feature so as to compute the alignment loss
         with torch.no_grad():
-            self.model.eval()
+            is_training = self.model.training  # Obtained from the module class
+            self.model.eval()  # Put the model in eval mode
             self.precomputed_features_ex = self.model(self.extra_examples)['features'].detach()
-            self.model.train()
+            self.model.train(mode=is_training)  # Set the model back into the same training mode
         self.feature_criterion = torch.nn.MSELoss()
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):

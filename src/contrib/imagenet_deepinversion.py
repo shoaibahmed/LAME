@@ -21,10 +21,11 @@ def validate_one(input, target, model):
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
+    model.eval()
     with torch.no_grad():
         output = model(input)['probas']
         prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-
+    model.train()
     print("Verifier accuracy: ", prec1.item())
 
 
@@ -69,7 +70,7 @@ def get_imagenet_examples(net, bs=256):
         coefficients["tv_l1"] = 0.0
         coefficients["tv_l2"] = 0.0001
         coefficients["l2"] = 0.00001
-        coefficients["lr"] = 0.1  # Reduced by a small factor
+        coefficients["lr"] = 0.025  # Reduced by a factor of 10
         coefficients["main_loss_multiplier"] = 10.0
 
     network_output_function = lambda x: x['logits']
