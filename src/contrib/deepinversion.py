@@ -246,7 +246,7 @@ class DeepInversionClass(object):
         local_rank = torch.cuda.current_device()
         if local_rank==0:
             create_folder(prefix)
-            create_folder(prefix + "/best_images/")
+            # create_folder(prefix + "/best_images/")
             create_folder(self.final_data_path)
             # save images to folders
             # for m in range(1000):
@@ -447,16 +447,16 @@ class DeepInversionClass(object):
 
                 if iteration % save_every==0 and (save_every > 0):
                     if local_rank==0:
-                        # Convert BGR to RGB if required for saving the images
-                        if not self.net_teacher.normalize_input:
-                            # MSRA checkpoint -- uses BGR input
-                            inputs_rgb = inputs[:, :, ::-1]
-                        else:
-                            inputs_rgb = inputs
+                        with torch.no_grad():
+                            # Convert BGR to RGB if required for saving the images
+                            if not self.net_teacher.normalize_input:
+                                # MSRA checkpoint -- uses BGR input
+                                permute = [2, 1, 0]
+                                inputs_rgb = inputs[:, permute, :, :]  # BCHW
+                            else:
+                                inputs_rgb = inputs
                         vutils.save_image(inputs_rgb,
-                                          '{}/best_images/output_{:05d}_gpu_{}.png'.format(self.prefix,
-                                                                                           iteration // save_every,
-                                                                                           local_rank),
+                                          '{}/output_{:05d}_gpu_{}.png'.format(self.prefix, iteration // save_every, local_rank),
                                           normalize=True, scale_each=True, nrow=int(10))
 
         best_inputs = denormalize(best_inputs)
