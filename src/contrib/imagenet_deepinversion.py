@@ -1,6 +1,17 @@
+import os
+import pickle
+
 import torch
 from torch import nn
 from .deepinversion import DeepInversionClass
+
+
+def get_probs(net, image):
+    if not net.normalize_input:
+        image = torch.clamp(image * 255, 0, 255)
+    if net.standardize_input:
+        image = (image - net.pixel_mean) / net.pixel_std
+    return net(image)['probas']
 
 
 def validate_one(input, target, model):
@@ -23,13 +34,23 @@ def validate_one(input, target, model):
 
     model.eval()
     with torch.no_grad():
-        output = model(input)['probas']
+        output = get_probs(model, input)
         prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     model.train()
     print("Verifier accuracy: ", prec1.item())
 
 
 def get_imagenet_examples(net, bs=256):
+    # Check if the pickle file already contains the batch information
+    cache_data_path = "./final_images/%s/cache.pkl"%exp_name
+    if os.path.exists(cache_data_path):
+        print("Loading data from cache file...")
+        with open(cache_data_path, "rb") as f:
+            image_list = pickle.load(f)
+        if len(image_list) == bs:
+            return image_list
+        else:
+            print(f"Warning: the cache file contains a different number of examples ({len(image_list)} instead of {bs}). Regenerating images...")
 
     exp_name = "tentmod_test"
     # final images will be stored here:
@@ -76,7 +97,7 @@ def get_imagenet_examples(net, bs=256):
     network_output_function = lambda x: x['logits']
 
     # check accuracy of verifier
-    verifier = False
+    verifier = False  # Wrong input range -- so will always give wrong predictions
     net.eval()
     if verifier:
         hook_for_display = lambda x,y: validate_one(x, y, net)
@@ -96,4 +117,10 @@ def get_imagenet_examples(net, bs=256):
                                              network_output_function = network_output_function,
                                              hook_for_display = hook_for_display)
     image_list = DeepInversionEngine.generate_batch()
+
+    # Write data to the cache file
+    with open(cache_data_path, "wb") as f:
+        pickle.dump(image_list, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print("Data saved to cache file...")
+
     return image_list
