@@ -80,8 +80,17 @@ class TentMod(AdaptiveMethod):
             cfg (CfgNode):
         """
         super().__init__(cfg, args, **kwargs)
-
+        self.clone_optim_params()
         self.initialize_examples()
+
+    def clone_optim_params(self):
+        print("Cloning optimization parameters...")
+        # Expected structure : List (of param dicts) -> Dict (of group of parameters) -> List (of parameters)
+        param_groups = self.optimizer.param_groups
+        print([param_dict.keys() for param_dict in param_groups])
+        print([[x.shape for x in param_group['params']] for param_group in param_groups])
+        # self.param_groups = [{k: [x.clone().detach() for x in param_group[k]] for k in param_group.keys()} for param_group in param_groups]
+        self.param_groups = [{'params': [x.clone().detach() for x in param_group['params']]} for param_group in param_groups]
 
     def initialize_examples(self):
         if hasattr(self, 'extra_examples'):
@@ -101,7 +110,7 @@ class TentMod(AdaptiveMethod):
             self.precomputed_features_ex = output_dict['features'].detach()
             self.precomputed_logits_ex = output_dict['logits'].detach()
             self.model.train(mode=is_training)  # Set the model back into the same training mode
-        self.feature_criterion = torch.nn.MSELoss()
+        self.alignment_criterion = torch.nn.MSELoss()
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
         t0 = time.time()
@@ -120,13 +129,25 @@ class TentMod(AdaptiveMethod):
         entropy = -(probas * log_probas).sum(-1).mean(0)
         
         # Include the second loss term
-        feature_alignment_loss = self.feature_criterion(features_ex, self.precomputed_features_ex)
-        logit_alignment_loss = self.feature_criterion(logits_ex, self.precomputed_logits_ex)
-        alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
+        feature_alignment_loss = self.alignment_criterion(features_ex, self.precomputed_features_ex)
+        logit_alignment_loss = self.alignment_criterion(logits_ex, self.precomputed_logits_ex)
         
-        loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
-        print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f}", flush=True)
+        # alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
+        # loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
         
+        params_alignment_loss = 0.
+        counter = 0
+        k = 'params'
+        for i in range(len(self.param_groups)):
+            for j in range(len(self.param_groups[i][k])):
+                params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
+                counter += 1
+        params_alignment_loss = params_alignment_loss / counter
+
+        loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * params_alignment_loss
+
+        print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f} / Params diff loss: {params_alignment_loss:.8f}", flush=True)
+
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore[union-attr]
         self.optimizer.step()
