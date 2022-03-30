@@ -41,6 +41,8 @@ def validate_one(input, target, model):
 
 
 def get_imagenet_examples(net, bs=256):
+    exp_name = "tentmod_test"
+    
     # Check if the pickle file already contains the batch information
     cache_data_path = "./final_images/%s/cache.pkl"%exp_name
     if os.path.exists(cache_data_path):
@@ -52,7 +54,6 @@ def get_imagenet_examples(net, bs=256):
         else:
             print(f"Warning: the cache file contains a different number of examples ({len(image_list)} instead of {bs}). Regenerating images...")
 
-    exp_name = "tentmod_test"
     # final images will be stored here:
     adi_data_path = "./final_images/%s"%exp_name
     # temporal data and generations will be stored here
