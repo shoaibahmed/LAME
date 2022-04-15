@@ -90,6 +90,7 @@ class TentMod(AdaptiveMethod):
         super().__init__(cfg, args, **kwargs)
 
         self.alignment_criterion = torch.nn.MSELoss()
+        self.use_param_alignment = self.cfg.ADAPTATION.USE_PARAM_ALIGNMENT
         self.clone_optim_params()
         self.initialize_examples()
 
@@ -107,9 +108,10 @@ class TentMod(AdaptiveMethod):
             return
         print("Initializing model examples...")
 
+        self.bs = self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES
         if use_model_inversion:
             print("Using model inversion to compute examples...")
-            self.extra_examples = get_imagenet_examples(self.model, bs=self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES)
+            self.extra_examples = get_imagenet_examples(self.model, bs=self.bs)
             print("Generated examples shape:", len(self.extra_examples), "/", self.extra_examples[0]['image'].shape)
         else:
             print("Using a selected number of examples from the actual training set...")
@@ -140,13 +142,32 @@ class TentMod(AdaptiveMethod):
             self.extra_examples = image_list
 
         # Compute the feature so as to compute the alignment loss
-        # TODO: Include batching to ensure that the features are properly computed
         with torch.no_grad():
             is_training = self.model.training  # Obtained from the module class
             self.model.eval()  # Put the model in eval mode
-            output_dict = self.model(self.extra_examples)
-            self.precomputed_features_ex = output_dict['features'].detach()
-            self.precomputed_logits_ex = output_dict['logits'].detach()
+            if self.bs == self.extra_examples:  # Generated examples
+                output_dict = self.model(self.extra_examples)
+                self.precomputed_features_ex = output_dict['features'].detach()
+                self.precomputed_logits_ex = output_dict['logits'].detach()
+            else:
+                n_batches = np.ceil(self.extra_examples / self.bs)
+                print(f"Num examples: {self.extra_examples} / Batch size: {self.bs} / Num batches: {n_batches}")
+                iterator = 0
+                self.precomputed_features_ex = []
+                self.precomputed_logits_ex = []
+                
+                for i in range(n_batches):
+                    output_dict = self.model(self.extra_examples[iterator:(iterator+self.bs)])
+                    self.precomputed_features_ex.append(output_dict['features'].detach())
+                    self.precomputed_logits_ex.append(output_dict['logits'].detach())
+                    iterator += len(self.precomputed_logits_ex[-1])
+                assert iterator == self.extra_examples
+                
+                self.precomputed_features_ex = torch.cat(self.precomputed_features_ex, dim=0)
+                self.precomputed_logits_ex = torch.cat(self.precomputed_logits_ex, dim=0)
+                assert len(self.precomputed_features_ex) == len(self.extra_examples)
+                assert len(self.precomputed_logits_ex) == len(self.extra_examples)
+            
             self.model.train(mode=is_training)  # Set the model back into the same training mode
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
@@ -154,10 +175,16 @@ class TentMod(AdaptiveMethod):
         # Compute the probs on the given set of examples
         probas = self.model(batched_inputs)['probas']
         
-        # Compute the feature alignment loss on the given number of examples
-        # output_dict = self.model(self.extra_examples)
-        # features_ex = output_dict['features']
-        # logits_ex = output_dict['logits']
+        if not self.use_param_alignment:
+            # Compute the feature alignment loss on a randomly selected number of examples
+            selected_ex = np.random.choice(np.arange(len(self.extra_examples)), size=self.bs, replace=False)
+            extra_examples = [self.extra_examples[i] for i in selected_ex]
+            target_features = [self.precomputed_features_ex[i] for i in selected_ex]
+            target_logits = [self.precomputed_logits_ex[i] for i in selected_ex]
+            
+            output_dict = self.model(extra_examples)
+            features_ex = output_dict['features']
+            logits_ex = output_dict['logits']
 
         self.metric_hook.scalar_dic["forward_time"].append(time.time() - t0)
         t1 = time.time()
@@ -165,26 +192,28 @@ class TentMod(AdaptiveMethod):
         log_probas = torch.log(probas + 1e-10)
         entropy = -(probas * log_probas).sum(-1).mean(0)
         
-        # Include the second loss term
-        # feature_alignment_loss = self.alignment_criterion(features_ex, self.precomputed_features_ex)
-        # logit_alignment_loss = self.alignment_criterion(logits_ex, self.precomputed_logits_ex)
-        
-        # alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
-        # loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
-        
-        params_alignment_loss = 0.
-        counter = 0
-        k = 'params'
-        for i in range(len(self.param_groups)):
-            for j in range(len(self.param_groups[i][k])):
-                params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
-                counter += 1
-        params_alignment_loss = params_alignment_loss / counter
+        if self.use_param_alignment:
+            params_alignment_loss = 0.
+            counter = 0
+            k = 'params'
+            for i in range(len(self.param_groups)):
+                for j in range(len(self.param_groups[i][k])):
+                    params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
+                    counter += 1
+            params_alignment_loss = params_alignment_loss / counter
 
-        loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * params_alignment_loss
+            loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * params_alignment_loss
+            print(f"Loss stats / Entropy: {entropy:.4f} / Params diff loss: {params_alignment_loss:.8f} / Total: {loss:.4f}", flush=True)
+        
+        else:    
+            # Include the second loss term
+            feature_alignment_loss = self.alignment_criterion(features_ex, target_features)
+            logit_alignment_loss = self.alignment_criterion(logits_ex, target_logits)
 
-        # print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f} / Params diff loss: {params_alignment_loss:.8f}", flush=True)
-        print(f"Loss stats / Entropy: {entropy:.4f} / Params diff loss: {params_alignment_loss:.8f} / Total: {loss:.4f}", flush=True)
+            alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
+            loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
+
+            print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f}", flush=True)
 
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore[union-attr]

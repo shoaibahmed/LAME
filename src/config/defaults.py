@@ -82,6 +82,7 @@ _C.ADAPTATION.HPARAMS_VALUES = [
 # SAS New configs
 _C.ADAPTATION.LAMBDA_ALIGNMENT = 1.0
 _C.ADAPTATION.NUM_GENERATED_EXAMPLES = 256
+_C.ADAPTATION.USE_PARAM_ALIGNMENT = False
 
 # -----------------------------------------------------------------------------
 # INPUT
