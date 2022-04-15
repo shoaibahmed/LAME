@@ -78,8 +78,7 @@ def clip(image_tensor, use_fp16=False):
 def forward_prop(net, image):
     if not net.normalize_input:
         image = torch.clamp(image * 255, 0, 255)
-    if net.standardize_input:
-        image = (image - net.pixel_mean) / net.pixel_std
+    image = (image - net.pixel_mean) / net.pixel_std
     return net(image)
 
 

@@ -92,7 +92,7 @@ nam_failure_tentmod_pt_r50: checkpoints/pytorch/R-50.pth
 	make MODE=test DATASET=imagenet_val method=tentmod model=pytorch_nft_r$(DEPTH) data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01 0.1" run
 
 nam_failure_tentmod: checkpoints/msra/R-50.pkl
-	make MODE=test DATASET=imagenet_val method=tentmod data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01" run
+	make MODE=test DATASET=imagenet_val method=tentmod data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.1" run
 
 nam_failure: checkpoints/msra/R-50.pkl
 	make MODE=test DATASET=imagenet_val method=non_adaptive data=niid_balanced run

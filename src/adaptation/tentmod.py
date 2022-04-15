@@ -122,6 +122,9 @@ class TentMod(AdaptiveMethod):
                 img = cv2.imread(img_file)  # Loads image in BGR format
                 assert img is not None
                 
+                # Resize image to 224 x 224
+                img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
+                
                 if self.model.normalize_input:  # Model uses RGB inputs rather than BGR
                     print("Converting image to RGB file format...")
                     img = img[:, :, ::-1]
@@ -150,8 +153,8 @@ class TentMod(AdaptiveMethod):
                 self.precomputed_features_ex = output_dict['features'].detach()
                 self.precomputed_logits_ex = output_dict['logits'].detach()
             else:
-                n_batches = np.ceil(self.extra_examples / self.bs)
-                print(f"Num examples: {self.extra_examples} / Batch size: {self.bs} / Num batches: {n_batches}")
+                n_batches = int(np.ceil(float(len(self.extra_examples)) / self.bs))
+                print(f"Num examples: {len(self.extra_examples)} / Batch size: {self.bs} / Num batches: {n_batches}")
                 iterator = 0
                 self.precomputed_features_ex = []
                 self.precomputed_logits_ex = []
@@ -161,7 +164,7 @@ class TentMod(AdaptiveMethod):
                     self.precomputed_features_ex.append(output_dict['features'].detach())
                     self.precomputed_logits_ex.append(output_dict['logits'].detach())
                     iterator += len(self.precomputed_logits_ex[-1])
-                assert iterator == self.extra_examples
+                assert iterator == len(self.extra_examples), f"{iterator} != {len(self.extra_examples)}"
                 
                 self.precomputed_features_ex = torch.cat(self.precomputed_features_ex, dim=0)
                 self.precomputed_logits_ex = torch.cat(self.precomputed_logits_ex, dim=0)
