@@ -182,8 +182,8 @@ class TentMod(AdaptiveMethod):
             # Compute the feature alignment loss on a randomly selected number of examples
             selected_ex = np.random.choice(np.arange(len(self.extra_examples)), size=self.bs, replace=False)
             extra_examples = [self.extra_examples[i] for i in selected_ex]
-            target_features = [self.precomputed_features_ex[i] for i in selected_ex]
-            target_logits = [self.precomputed_logits_ex[i] for i in selected_ex]
+            target_features = torch.stack([self.precomputed_features_ex[i] for i in selected_ex], dim=0)
+            target_logits = torch.stack([self.precomputed_logits_ex[i] for i in selected_ex], dim=0)
             
             output_dict = self.model(extra_examples)
             features_ex = output_dict['features']
