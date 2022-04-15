@@ -3,7 +3,7 @@ SHELL=/bin/bash
 # ------ GPU option ---------
 
 GPUS=all # use e.g. GPUS=0,1,2 if you only want to use a certain set of GPUs on the cluster
-GPU_FREE_UNDER=10000 # Usgae of memory (in MB) under which a GPU is considered free for simulation.
+GPU_FREE_UNDER=8000 # Usgae of memory (in MB) under which a GPU is considered free for simulation.
 
 
 # ------ SERVER options --------- (only useful if you want to deploy/import results from remote server)
@@ -30,7 +30,7 @@ MAX_SIZE_PER_EPISODE=5e4
 
 # ------ Default options ------------
 
-METHODS=non_adaptive tent pl shot lame ada_bn# Which methods to iterate benchmarking over
+METHODS=non_adaptive tent pl shot lame ada_bn tentmod# Which methods to iterate benchmarking over
 PROVIDER=msra
 DEPTH=50
 model=$(PROVIDER)_nft_r$(DEPTH)# Model used. For exhaustive list, c.f. configs/model/adaptation/
@@ -92,7 +92,7 @@ nam_failure_tentmod_pt_r50: checkpoints/pytorch/R-50.pth
 	make MODE=test DATASET=imagenet_val method=tentmod model=pytorch_nft_r$(DEPTH) data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01 0.1" run
 
 nam_failure_tentmod: checkpoints/msra/R-50.pkl
-	make MODE=test DATASET=imagenet_val method=tentmod data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.1" run
+	make MODE=test DATASET=imagenet_val method=tentmod data=niid_balanced LOOP_ARG=ADAPTATION.LR LOOP_VALUES="0.001 0.01" run
 
 nam_failure: checkpoints/msra/R-50.pkl
 	make MODE=test DATASET=imagenet_val method=non_adaptive data=niid_balanced run
@@ -114,12 +114,56 @@ validation: checkpoints/msra/R-50.pkl
 		done ;\
 	done ;\
 
+validation_limited: checkpoints/msra/R-50.pkl
+	all_datas="iid_balanced iid_imbalanced niid_balanced niid_imbalanced" ;\
+	# METHODS="non_adaptive tent pl shot lame ada_bn" ;\
+	METHODS="non_adaptive tent lame ada_bn" ;\
+	for method in $${METHODS}; do \
+		for data in $${all_datas}; do \
+ 			make MODE=validation DATASET=imagenet_c_16 method=$${method} data=$${data} run ;\
+ 			make MODE=validation DATASET=imagenet_c_val method=$${method} data=$${data} run ;\
+ 			make MODE=validation DATASET=imagenet_val method=$${method} data=$${data} run ;\
+		done ;\
+	done ;\
+
+validation_tentmod: checkpoints/msra/R-50.pkl
+	all_datas="iid_balanced iid_imbalanced niid_balanced niid_imbalanced" ;\
+	for data in $${all_datas}; do \
+		make MODE=validation DATASET=imagenet_c_16 method=tentmod data=$${data} run ;\
+		make MODE=validation DATASET=imagenet_c_val method=tentmod data=$${data} run ;\
+		make MODE=validation DATASET=imagenet_val method=tentmod data=$${data} run ;\
+	done ;\
+
+validation_heatmap_tentmod:
+	python3 -m src.utils.read_results \
+	--stage validation \
+	--latex $(LATEX) \
+	--action cross_cases \
+	--methods "TentMod" \
+	--datasets imagenet_val imagenet_c_val  imagenet_c_16 \
+	--cases  \
+   		   "DATASETS.ADAPTATION=['imagenet_val'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=True" \
+   		   "DATASETS.ADAPTATION=['imagenet_val'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=False"  \
+   		   "DATASETS.ADAPTATION=['imagenet_val'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=True" \
+   		   "DATASETS.ADAPTATION=['imagenet_val'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=False"  \
+   		   "DATASETS.ADAPTATION=['imagenet_c_val'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=True" \
+   		   "DATASETS.ADAPTATION=['imagenet_c_val'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=False"  \
+   		   "DATASETS.ADAPTATION=['imagenet_c_val'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=True"  \
+   		   "DATASETS.ADAPTATION=['imagenet_c_val'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=False"  \
+		   "DATASETS.ADAPTATION=['imagenet_c_16'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=True" \
+   		   "DATASETS.ADAPTATION=['imagenet_c_16'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=False"  \
+   		   "DATASETS.ADAPTATION=['imagenet_c_16'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=True" \
+   		   "DATASETS.ADAPTATION=['imagenet_c_16'],DATASETS.IMBALANCE_SHIFT=True,DATASETS.IID=False"  \
+	--case_names "IN" "IN + niid"  "IN + ls" "IN + ls + niid" \
+				 "INC" "INC + niid"  "INC + ls" "INC + ls + niid" \
+				 "INC_16" "INC_16 + niid" "INC_16 + ls" "INC_16 + ls + niid" 
+
 validation_heatmap:
 	python3 -m src.utils.read_results \
 	--stage validation \
 	--latex $(LATEX) \
 	--action cross_cases \
-	--methods "NonAdaptiveMethod" "Tent" "AdaBN" "Shot" "PseudoLabeller" "LAME" \
+	--methods "NonAdaptiveMethod" "Tent" "AdaBN" "Shot" "PseudoLabeller" "LAME" "TentMod" \
 	--datasets imagenet_val imagenet_c_val  imagenet_c_16 \
 	--cases  \
    		   "DATASETS.ADAPTATION=['imagenet_val'],DATASETS.IMBALANCE_SHIFT=False,DATASETS.IID=True" \

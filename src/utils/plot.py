@@ -350,6 +350,8 @@ def make_plot(args,
                 ax.plot(timesteps, mean, label=label, color=color_dic[count], linestyle=style_dic[count], linewidth=6)
                 ax.fill_between(timesteps, mean - conf_inter, mean + conf_inter, color=color_dic[count], alpha=0.1)
                 ax.set_xlabel("Online batches")
+                if metric == 'accuracy':
+                    ax.set_ylim(0., 1.)
                 ax.set_ylabel(metric2pretty[metric])
             # ax.grid(axis='y')
             y_pos = 1.2 if accumulate_dic[metric] else 0.95

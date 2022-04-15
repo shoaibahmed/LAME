@@ -4,6 +4,14 @@ import logging
 from typing import List, Dict
 import time
 
+import os
+import glob
+import numpy as np
+import cv2
+
+import src.data.utils
+from src.data.datasets.classes.imagenet import INDEX2IDNAME, ID2INDEX
+
 from .adaptive import AdaptiveMethod
 from .build import ADAPTER_REGISTRY
 
@@ -80,6 +88,8 @@ class TentMod(AdaptiveMethod):
             cfg (CfgNode):
         """
         super().__init__(cfg, args, **kwargs)
+
+        self.alignment_criterion = torch.nn.MSELoss()
         self.clone_optim_params()
         self.initialize_examples()
 
@@ -92,17 +102,45 @@ class TentMod(AdaptiveMethod):
         # self.param_groups = [{k: [x.clone().detach() for x in param_group[k]] for k in param_group.keys()} for param_group in param_groups]
         self.param_groups = [{'params': [x.clone().detach() for x in param_group['params']]} for param_group in param_groups]
 
-    def initialize_examples(self):
+    def initialize_examples(self, use_model_inversion=False):
         if hasattr(self, 'extra_examples'):
             return
         print("Initializing model examples...")
-        self.lambda_alignment = self.cfg.ADAPTATION.LAMBDA_ALIGNMENT
 
-        # Compute the extra examples here
-        self.extra_examples = get_imagenet_examples(self.model, bs=self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES)
-        print("Generated examples shape:", len(self.extra_examples), "/", self.extra_examples[0]['image'].shape)
+        if use_model_inversion:
+            print("Using model inversion to compute examples...")
+            self.extra_examples = get_imagenet_examples(self.model, bs=self.cfg.ADAPTATION.NUM_GENERATED_EXAMPLES)
+            print("Generated examples shape:", len(self.extra_examples), "/", self.extra_examples[0]['image'].shape)
+        else:
+            print("Using a selected number of examples from the actual training set...")
+            img_files = glob.glob("/mnt/sas/Datasets/ilsvrc12/small_train_2_imgs/*/*.JPEG")
+            image_list = []
+            
+            for img_file in img_files:
+                img = cv2.imread(img_file)  # Loads image in BGR format
+                assert img is not None
+                
+                if self.model.normalize_input:  # Model uses RGB inputs rather than BGR
+                    print("Converting image to RGB file format...")
+                    img = img[:, :, ::-1]
+                
+                instances = []
+                dir_name = img_file.split(os.sep)[-2]
+                class_id = ID2INDEX[dir_name]
+                cat_index = class_id
+                cat_id, cat_name = INDEX2IDNAME[cat_index]
+                instances.append({"category_id": cat_id, "supercategory_id": cat_id, 
+                            "supercategory_index": cat_index, "category_index": cat_index,
+                            "category_name": cat_name, "supercategory_name": cat_name})
+                # r["annotations"] = instances
+                image_shape = (img.shape[1], img.shape[0], img.shape[2])  # Format it as WHC instead of HWC
+                instances = src.data.utils.annotations_to_instances(instances, image_shape)
+
+                image_list.append({'image': img, 'instances': instances})
+            self.extra_examples = image_list
 
         # Compute the feature so as to compute the alignment loss
+        # TODO: Include batching to ensure that the features are properly computed
         with torch.no_grad():
             is_training = self.model.training  # Obtained from the module class
             self.model.eval()  # Put the model in eval mode
@@ -110,7 +148,6 @@ class TentMod(AdaptiveMethod):
             self.precomputed_features_ex = output_dict['features'].detach()
             self.precomputed_logits_ex = output_dict['logits'].detach()
             self.model.train(mode=is_training)  # Set the model back into the same training mode
-        self.alignment_criterion = torch.nn.MSELoss()
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
         t0 = time.time()
@@ -118,9 +155,9 @@ class TentMod(AdaptiveMethod):
         probas = self.model(batched_inputs)['probas']
         
         # Compute the feature alignment loss on the given number of examples
-        output_dict = self.model(self.extra_examples)
-        features_ex = output_dict['features']
-        logits_ex = output_dict['logits']
+        # output_dict = self.model(self.extra_examples)
+        # features_ex = output_dict['features']
+        # logits_ex = output_dict['logits']
 
         self.metric_hook.scalar_dic["forward_time"].append(time.time() - t0)
         t1 = time.time()
@@ -129,8 +166,8 @@ class TentMod(AdaptiveMethod):
         entropy = -(probas * log_probas).sum(-1).mean(0)
         
         # Include the second loss term
-        feature_alignment_loss = self.alignment_criterion(features_ex, self.precomputed_features_ex)
-        logit_alignment_loss = self.alignment_criterion(logits_ex, self.precomputed_logits_ex)
+        # feature_alignment_loss = self.alignment_criterion(features_ex, self.precomputed_features_ex)
+        # logit_alignment_loss = self.alignment_criterion(logits_ex, self.precomputed_logits_ex)
         
         # alignment_loss = 0.5 * feature_alignment_loss + 0.5 * logit_alignment_loss
         # loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * alignment_loss
@@ -146,7 +183,8 @@ class TentMod(AdaptiveMethod):
 
         loss = entropy + self.cfg.ADAPTATION.LAMBDA_ALIGNMENT * params_alignment_loss
 
-        print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f} / Params diff loss: {params_alignment_loss:.8f}", flush=True)
+        # print(f"Loss stats / Entropy: {entropy:.4f} / Feature alignment: {feature_alignment_loss:.4f} / Logit alignment: {logit_alignment_loss:.4f} / Total: {loss:.4f} / Params diff loss: {params_alignment_loss:.8f}", flush=True)
+        print(f"Loss stats / Entropy: {entropy:.4f} / Params diff loss: {params_alignment_loss:.8f} / Total: {loss:.4f}", flush=True)
 
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore[union-attr]
