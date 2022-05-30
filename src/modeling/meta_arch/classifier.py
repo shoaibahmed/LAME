@@ -48,6 +48,7 @@ class Classifier(nn.Module):
         self.normalize_input = kwargs['normalize_input']
         self.standardize_input = kwargs['standardize_input']
         self.head_type = kwargs['head_type']
+        self.input_type = kwargs['input_type']
 
         # -------- Classifier -----------
         input_shape = {k: v for k, v in backbone.output_shape().items() if k in cls_in_features}
@@ -101,6 +102,7 @@ class Classifier(nn.Module):
             "normalize_input": cfg.MODEL.NORMALIZE_INPUT,
             "standardize_input": cfg.MODEL.STANDARDIZE_INPUT,
             "head_type": cfg.MODEL.CLS_HEAD.TYPE,
+            "input_type": cfg.INPUT.FORMAT,
         }
 
     @property
