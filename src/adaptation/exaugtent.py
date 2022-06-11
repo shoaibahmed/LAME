@@ -12,6 +12,10 @@ from .build import ADAPTER_REGISTRY
 
 from ..imagenet_c_aug import ImageAugmentator
 
+from tqdm import tqdm
+from contextlib import ExitStack, contextmanager
+from src.utils.events import EventStorage
+
 __all__ = ["ExAugTent"]
 
 logger = logging.getLogger(__name__)
@@ -31,9 +35,6 @@ class ExAugTent(AdaptiveMethod):
         super().__init__(cfg, args, **kwargs)
 
         self.alignment_criterion = torch.nn.MSELoss()
-        self.use_param_alignment = self.cfg.ADAPTATION.USE_PARAM_ALIGNMENT
-        self.use_eval_mode = self.cfg.ADAPTATION.USE_EVAL_MODE
-        self.input_format = self.cfg.INPUT.FORMAT
         self.clone_optim_params()
         
         self.augmentor = ImageAugmentator()
@@ -41,19 +42,66 @@ class ExAugTent(AdaptiveMethod):
         self.num_optim_steps = 10
 
     def clone_optim_params(self):
-        # print("Cloning optimization parameters...")
-        # # Expected structure : List (of param dicts) -> Dict (of group of parameters) -> List (of parameters)
-        # param_groups = self.optimizer.param_groups
-        # print([param_dict.keys() for param_dict in param_groups])
-        # print([[x.shape for x in param_group['params']] for param_group in param_groups])
-        # self.param_groups = [{'params': [x.clone().detach() for x in param_group['params']]} for param_group in param_groups]
-        self.param_groups = copy.deepcopy(self.optimizer.param_groups)
+        print("Cloning optimization parameters...")
+        # Expected structure : List (of param dicts) -> Dict (of group of parameters) -> List (of parameters)
+        param_groups = self.optimizer.param_groups
+        print([param_dict.keys() for param_dict in param_groups])
+        print([len(param_group['params']) for param_group in param_groups], [[x.shape for x in param_group['params']] for param_group in param_groups])
+        self.param_groups = [{'params': [x.clone().detach() for x in param_group['params']]} for param_group in param_groups]
+        # self.param_groups = copy.deepcopy(self.optimizer.param_groups)
     
     def reset_model_params(self):
-        self.optimizer.param_groups = self.param_groups
+        k = 'params'
+        for i in range(len(self.param_groups)):
+            for j in range(len(self.param_groups[i][k])):
+                self.optimizer.param_groups[i][k][j] = self.param_groups[i][k][j].clone().detach()
+        # self.optimizer.param_groups = copy.deepcopy(self.param_groups)
+    
+    def run_episode(self, loader: torch.utils.data.DataLoader) -> EventStorage:
+        """
+        Loader contains all the samples in one run, and yields them by batches.
+        """
+        self.reset_model_optim()
+        max_inner_iters = self.cfg.ADAPTATION.MAX_BATCH_PER_EPISODE
+        with EventStorage(0) as local_storage:
+
+            for _ in range(self.steps):
+                batch_limitator = range(max_inner_iters)
+                bar = tqdm(loader, total=min(len(loader), max_inner_iters))
+                bar.set_description(f"Running optimization steps {'online' if self.online else 'offline'}")
+                for i, (batched_inputs, indexes) in zip(batch_limitator, bar):
+
+                    # --- Optimization part ---
+
+                    # self.run_optim_step(batched_inputs, indexes=indexes, loader=loader, batch_index=i)
+
+                    # --- Evaluation part ---
+
+                    if self.online:
+                        # with ExitStack() as stack:
+                        #     stack.enter_context(inference_context(self.model))
+                        #     stack.enter_context(torch.no_grad())
+                        self.before_step()
+                        t0 = time.time()
+                        outputs = self.run_step(batched_inputs)
+                        self.metric_hook.scalar_dic["inference_time"].append(time.time() - t0)
+                        self.after_step(batched_inputs, outputs)
+
+        return local_storage
+    
+    def compute_param_diff(self):
+        k = 'params'
+        counter = 0
+        params_alignment_loss = 0.
+        for i in range(len(self.param_groups)):
+            for j in range(len(self.param_groups[i][k])):
+                params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
+                counter += 1
+        params_alignment_loss = params_alignment_loss / counter
+        return float(params_alignment_loss)
 
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
-        pass  # Do nothing at training time
+        raise RuntimeError("No optimization step applicable...")  # Do nothing at training time
     
     def visualize_images(self, imgs, output_file=None):
         import matplotlib.pyplot as plt
@@ -85,7 +133,6 @@ class ExAugTent(AdaptiveMethod):
     def run_step(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         # Compute the probs on the given set of examples
         # Roll back the parameters to the original values before optimizing anything
-        torch.set_grad_enabled(True)
         
         prob_list = []
         logit_list = []
@@ -109,6 +156,8 @@ class ExAugTent(AdaptiveMethod):
             # self.visualize_images(current_example_batch, output_file="aug_test.png")
             # self.visualize_images(batched_inputs, output_file="original_batch_test.png")
             
+            print("Computing param alignment loss before adaptation:", self.compute_param_diff())
+            
             for _ in range(self.num_optim_steps):
                 probas = self.model(current_example_batch)['probas']
                 
@@ -117,8 +166,10 @@ class ExAugTent(AdaptiveMethod):
                 entropy = -(probas * log_probas).sum(-1).mean(0)
                 
                 self.optimizer.zero_grad()
-                entropy.backward()  # type: ignore[union-attr]
+                entropy.backward()
                 self.optimizer.step()
+                
+                print("Computing param alignment loss after update:", self.compute_param_diff())
             
             print(f"Inference step stats for example # {i+1} / Entropy: {entropy:.4f}", flush=True)
             
@@ -130,11 +181,13 @@ class ExAugTent(AdaptiveMethod):
             
             # Reset the model
             self.reset_model_params()
+            
+            print("Computing param alignment loss after resetting model weights:", self.compute_param_diff())
+            exit()
         
         probas = torch.cat(prob_list, dim=0)
         logits = torch.cat(logit_list, dim=0)
         features = torch.cat(features_list, dim=0)
-        torch.set_grad_enabled(False)
         
         final_output = self.model.format_result(batched_inputs, logits, probas, features)
         return final_output
