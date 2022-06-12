@@ -34,12 +34,12 @@ class ExAugTent(AdaptiveMethod):
         """
         super().__init__(cfg, args, **kwargs)
 
-        self.alignment_criterion = torch.nn.MSELoss()
-        self.clone_optim_params()
-        
         self.augmentor = ImageAugmentator()
         self.num_augs = 16
         self.num_optim_steps = 10
+        
+        self.alignment_criterion = torch.nn.MSELoss()
+        self.clone_optim_params()
 
     def clone_optim_params(self):
         print("Cloning optimization parameters...")
@@ -48,14 +48,14 @@ class ExAugTent(AdaptiveMethod):
         print([param_dict.keys() for param_dict in param_groups])
         print([len(param_group['params']) for param_group in param_groups], [[x.shape for x in param_group['params']] for param_group in param_groups])
         self.param_groups = [{'params': [x.clone().detach() for x in param_group['params']]} for param_group in param_groups]
-        # self.param_groups = copy.deepcopy(self.optimizer.param_groups)
     
     def reset_model_params(self):
-        k = 'params'
-        for i in range(len(self.param_groups)):
-            for j in range(len(self.param_groups[i][k])):
-                self.optimizer.param_groups[i][k][j] = self.param_groups[i][k][j].clone().detach()
+        # k = 'params'
+        # for i in range(len(self.param_groups)):
+        #     for j in range(len(self.param_groups[i][k])):
+        #         self.optimizer.param_groups[i][k][j] = self.param_groups[i][k][j].clone().detach()
         # self.optimizer.param_groups = copy.deepcopy(self.param_groups)
+        self.reset_model_optim()
     
     def run_episode(self, loader: torch.utils.data.DataLoader) -> EventStorage:
         """
@@ -89,46 +89,8 @@ class ExAugTent(AdaptiveMethod):
 
         return local_storage
     
-    def compute_param_diff(self):
-        k = 'params'
-        counter = 0
-        params_alignment_loss = 0.
-        for i in range(len(self.param_groups)):
-            for j in range(len(self.param_groups[i][k])):
-                params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
-                counter += 1
-        params_alignment_loss = params_alignment_loss / counter
-        return float(params_alignment_loss)
-
     def run_optim_step(self, batched_inputs: List[Dict[str, torch.Tensor]], **kwargs):
         raise RuntimeError("No optimization step applicable...")  # Do nothing at training time
-    
-    def visualize_images(self, imgs, output_file=None):
-        import matplotlib.pyplot as plt
-        
-        plot_size = 3
-        plot_rows = 3
-        num_plots_per_row = 3
-        fig, ax = plt.subplots(plot_rows, num_plots_per_row, figsize=(plot_size * num_plots_per_row, plot_size * plot_rows), sharex=True, sharey=True)
-
-        for idx in range(len(imgs)):
-            ax[idx // num_plots_per_row, idx % num_plots_per_row].imshow(imgs[idx]['image'])
-            # ax[idx // num_plots_per_row, idx % num_plots_per_row].set_title(y[idx])
-
-            if idx == plot_rows * num_plots_per_row - 1:
-                break
-
-        for a in ax.ravel():
-            a.set_axis_off()
-
-            # Turn off tick labels
-            a.set_yticklabels([])
-            a.set_xticklabels([])
-
-        fig.tight_layout()
-        if output_file is not None:
-            fig.savefig(output_file, bbox_inches=0.0, pad_inches=0)
-        plt.close()
     
     def run_step(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         # Compute the probs on the given set of examples
@@ -158,7 +120,7 @@ class ExAugTent(AdaptiveMethod):
             
             print("Computing param alignment loss before adaptation:", self.compute_param_diff())
             
-            for _ in range(self.num_optim_steps):
+            for j in range(self.num_optim_steps):
                 probas = self.model(current_example_batch)['probas']
                 
                 # Optimize the model over these samples
@@ -169,7 +131,7 @@ class ExAugTent(AdaptiveMethod):
                 entropy.backward()
                 self.optimizer.step()
                 
-                print("Computing param alignment loss after update:", self.compute_param_diff())
+                print(f"Computing param alignment loss after update # {j+1}:", self.compute_param_diff())
             
             print(f"Inference step stats for example # {i+1} / Entropy: {entropy:.4f}", flush=True)
             
@@ -191,8 +153,42 @@ class ExAugTent(AdaptiveMethod):
         
         final_output = self.model.format_result(batched_inputs, logits, probas, features)
         return final_output
+
+    def compute_param_diff(self):
+        k = 'params'
+        counter = 0
+        params_alignment_loss = 0.
         
-        # out = self.model(batched_inputs)
-        # logits = out["logits"]
-        # probas = out["probas"]
-        # features = out["features"]
+        for i in range(len(self.param_groups)):
+            for j in range(len(self.param_groups[i][k])):
+                params_alignment_loss = params_alignment_loss + self.alignment_criterion(self.optimizer.param_groups[i][k][j], self.param_groups[i][k][j])
+                counter += 1
+        params_alignment_loss = params_alignment_loss / counter
+        return float(params_alignment_loss)
+
+    def visualize_images(self, imgs, output_file=None):
+        import matplotlib.pyplot as plt
+        
+        plot_size = 3
+        plot_rows = 3
+        num_plots_per_row = 3
+        fig, ax = plt.subplots(plot_rows, num_plots_per_row, figsize=(plot_size * num_plots_per_row, plot_size * plot_rows), sharex=True, sharey=True)
+
+        for idx in range(len(imgs)):
+            ax[idx // num_plots_per_row, idx % num_plots_per_row].imshow(imgs[idx]['image'])
+            # ax[idx // num_plots_per_row, idx % num_plots_per_row].set_title(y[idx])
+
+            if idx == plot_rows * num_plots_per_row - 1:
+                break
+
+        for a in ax.ravel():
+            a.set_axis_off()
+
+            # Turn off tick labels
+            a.set_yticklabels([])
+            a.set_xticklabels([])
+
+        fig.tight_layout()
+        if output_file is not None:
+            fig.savefig(output_file, bbox_inches=0.0, pad_inches=0)
+        plt.close()

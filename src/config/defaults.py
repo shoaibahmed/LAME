@@ -72,7 +72,7 @@ _C.ADAPTATION.SHOT_BETA = 0.
 _C.ADAPTATION.PARAMS2ADAPT = "all-BN"
 _C.ADAPTATION.HPARAMS2TUNE = ['ADAPTATION.PARAMS2ADAPT', 'ADAPTATION.LR', 'MODEL.BACKBONE.BN_MOMENTUM', 'ADAPTATION.OPTIM_MOMENTUM']
 _C.ADAPTATION.HPARAMS_VALUES = [
-								["0-BN", "1-BN", "all-BN"],  # noqa: E126
+								["0-BN", "1-BN", "all-BN", "all"],  # noqa: E126
 								[0.001, 0.01, 0.1],  # noqa: W191
 								[0., 0.1, 1.0],  # noqa: W191
 								[0., 0.9],  # noqa: W191
